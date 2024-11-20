@@ -13,6 +13,10 @@ def QLuaControllerStart(Filter="QLua"):
     # Создаем объект события получения данных отладочного сообщения
     data_ready = win32event.CreateEvent(None, 0, 0, "DBWIN_DATA_READY")
     # Выделяем память под буфер обмена
+    # https://www.codeproject.com/Articles/23776/Mechanism-of-OutputDebugString
+    # DBWIN_BUFFER: It is the name of shared memory.
+    #               Its size is 4K bytes, the first 4 bytes indicate the process id
+    #               and the following is the content of debug string.
     _buffer = mmap.mmap(0, 4096, "DBWIN_BUFFER", mmap.ACCESS_WRITE)
 
     while True:
@@ -25,8 +29,11 @@ def QLuaControllerStart(Filter="QLua"):
             # Получаем идентификатор процесса, отправившего отладочное сообщение
             process_id, = struct.unpack("L", _buffer.read(4))
             # Считываем отладочное сообщение из буфера обмена
-            data = _buffer.read(4092)
-            data_str = data.decode()
+            data = _buffer.read(4096)
+            try:
+                data_str = data.decode(encoding='utf-8')
+            except UnicodeDecodeError:
+                data_str = data.decode(encoding='cp1251')
             #print(">>>", process_id, data_str)
             # Считываем строку до символа окончания строки, если он присутствует
             if "\0" in data_str:
@@ -41,11 +48,10 @@ def QLuaControllerStart(Filter="QLua"):
             if str1.find(Filter) >= 0:
                 ticks = time.localtime()
                 # Выводим отладочное сообщение в консоль
-                print("Pid %d [%02d:%02d:%02d]: %s" % (process_id,
-                                                       ticks.tm_hour,
-                                                       ticks.tm_min,
-                                                       ticks.tm_sec,
-                                                       str1))
+                print("[%02d:%02d:%02d]: %s" % (ticks.tm_hour,
+                                                ticks.tm_min,
+                                                ticks.tm_sec,
+                                                str1))
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
